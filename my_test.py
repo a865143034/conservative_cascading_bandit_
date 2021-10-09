@@ -1,4 +1,5 @@
 #coding:utf-8
+import proc_lastfm
 from env import *
 import numpy as np
 import math
@@ -986,3 +987,296 @@ def conservative_bandit(epsilon):
             f.flush()
 
     return regret
+
+
+
+
+def lastfm_c_4(epsilon):
+    reward=[]
+    regret=[]
+    u_0=0.7
+    n=10000
+    theta_hat=np.zeros(d).reshape(-1,1)
+    beta=1
+    delta=0.1
+    lamda=1
+    V=lamda*np.eye(d)
+    X=[]
+    Y=[]
+    N_t=[]
+    D_t=[]
+    #A=[]#每个t的action
+    all_x=[]
+    all_L=[]
+    #got_theta_star()
+    n1=0
+    n2=0
+    f=open('real2_c_4.txt','w')
+    start=time.time()
+    a,b,c,D=proc_lastfm.cal_relation()
+    for t in range(n):
+        if (t+1)%200==0:
+            print('now turn:'+str(t))
+            end=time.time()
+            print(end-start)
+        userid = random.randint(1, 99)
+        x,feedback=proc_lastfm.get_100(userid,a,b,c,D)
+        #x_hat=pro_movielen.cal_relation(random.randint(0,))
+        U=[]
+        L=[]
+        for i in np.array(x):
+            front=np.dot(i.reshape(1,-1),theta_hat)
+            V_ni=np.linalg.inv(V)
+            i=i.reshape(-1,1)
+            i_ni=i.reshape(1,-1)
+            behind=beta*np.sqrt(i_ni.dot(V_ni).dot(i))
+            #tmp=np.asscalar(front+behind)
+            tmp = min(np.asscalar(front + behind), 1)
+            tmp2=max(np.asscalar(front-behind),0)
+            U.append(tmp)
+            L.append(tmp2)
+        #choose optimistic action
+        A_t=oracle(U)
+        B_t=A_t
+
+        if u_0>f_(A_t,U):
+            B_t=0
+
+        if B_t!=0:
+            tmp_x = []
+            for i in A_t:
+                tmp_x.append(x[i])
+            tmp_L = []
+            for i in A_t:
+                tmp_L.append(L[i])
+            all_x.append(tmp_x)
+            all_L.append(tmp_L)
+        else:
+            all_L.append(0)
+            all_x.append(0)
+        ###conservative judge
+        ####judge有问题，比例太有问题了
+        for i in N_t:
+            for k in range(4):
+                j=all_x[i][k]
+                front = np.dot(j.reshape(1, -1), theta_hat)
+                V_ni = np.linalg.inv(V)
+                j = j.reshape(-1, 1)
+                j_ni = j.reshape(1, -1)
+                behind = beta * np.sqrt(j_ni.dot(V_ni).dot(j))
+                tmp = max(np.asscalar(front - behind), 0)
+                all_L[i][k]=tmp
+        #L每轮的必须更新？还是可以存个和？
+        s1=0
+        for i in N_t:
+            s1+=f_([0,1,2,3],all_L[i])
+        phi_t=len(D_t)*u_0+f_(B_t,L)+s1
+        ###太整齐了，1：2的比例，n1,n2，3:7
+        flag=False
+        if phi_t >=(1-epsilon)*(t+1)*u_0 and B_t!=0:
+            flag=True
+            #print('A')
+            n1+=1
+            N_t.append(t)
+            idx,w=pull2(B_t,feedback)
+            #update
+            #V
+            for i in range(idx + 1):
+                t1 = x[A_t[i]].reshape(-1, 1)
+                t2 = t1.reshape(1, -1)
+                V = V + t1.dot(t2)
+            #X
+            for i in range(idx + 1):
+                X.append(x[A_t[i]].tolist())
+            # print('&&&&&')
+            # print(np.array(X).shape)
+            #Y
+            for i in range(idx + 1):
+                Y.append(w[i])
+            # print('^^^^^^')
+            # print(np.array(Y).shape)
+            # theta
+            #print(np.array(X).T.shape)
+            tm1 = np.array(X).T.dot(np.array(X)) + lamda * np.eye(d)
+            tm1_ni = np.linalg.inv(tm1)
+            #print(t1)
+            theta_hat = tm1_ni.dot(np.array(X).T).dot(np.array(Y).reshape(-1,1))
+            #print(theta_hat)
+            #print(tm1_ni)
+            # beta
+            det = np.linalg.det(V)
+            beta = np.sqrt(math.log(det / (lamda ** d * delta ** 2))) + np.sqrt(lamda)
+        else:
+            n2+=1
+            D_t.append(t)
+        ###update reward和regret
+        # opt_w=[]
+        # theta_star_1=get_theta_star()
+        # for i in x:
+        #     opt_w.append(theta_star_1.dot(i))
+        # f2=f_([0,1,2,3],sorted(opt_w,reverse=True))
+        # f2=max(f2,u_0)
+        # print(f_([0,1,2,3],sorted(opt_w)))
+        #
+        # assert 1==0
+        if flag==True:
+            f1=f_(A_t,feedback)
+            reward.append(f1)
+            #regret.append(f2-f1)
+            f.write(str(f1)+'\n')
+        else:
+            f.write(str(u_0)+'\n')
+            reward.append(u_0)
+            #regret.append(f2-u_0)
+
+        if (t+1)%100==0:
+            print('&&&&&&')
+            print(n1)
+            print(n2)
+            f.flush()
+
+    return regret
+    # f.close()
+
+
+lastfm_c_4(0.2)
+
+
+
+def lastfm_without(epsilon):
+    reward=[]
+    regret=[]
+    #epsilon=0.2
+    u_0=0.7
+    n=10000
+    theta_hat=np.zeros(d).reshape(-1,1)
+    beta=1
+    delta=0.1
+    lamda=1
+    V=lamda*np.eye(d)
+    X=[]
+    Y=[]
+    N_t=[]
+    D_t=[]
+    #A=[]#每个t的action
+    all_x=[]
+    all_L=[]
+    n1=0
+    n2=0
+    hat_u_0=0
+    a,b,c,D=proc_lastfm.cal_relation()
+    f=open('real2_c_4_without.txt','w')
+    start=time.time()
+    for t in range(n):
+        if (t+1)%200==0:
+            print('now turn:'+str(t))
+            end=time.time()
+            print(end-start)
+        userid = random.randint(1, 99)
+        x,feedback=proc_lastfm.get_100(userid,a,b,c,D)
+        tmp_u=np.random.normal(u_0,0.1)
+        hat_u_0=(hat_u_0*t+tmp_u)/(t+1)
+        U=[]
+        L=[]
+        behind=0
+        for i in x:
+            front=np.dot(i.reshape(1,-1),theta_hat)
+            V_ni=np.linalg.inv(V)
+            i=i.reshape(-1,1)
+            i_ni=i.reshape(1,-1)
+            behind=beta*np.sqrt(i_ni.dot(V_ni).dot(i))
+            tmp = min(np.asscalar(front + behind), 1)
+            tmp2=max(np.asscalar(front-behind),0)
+            U.append(tmp)
+            L.append(tmp2)
+        radius=math.sqrt(2*math.log(40000)/(t+1))
+        u_0_U=hat_u_0+radius
+        #choose optimistic action
+        A_t=oracle(U)
+        B_t=A_t
+        if u_0_U>f_(A_t,U):
+            B_t=0
+        if B_t!=0:
+            tmp_x = []
+            for i in A_t:
+                tmp_x.append(x[i])
+            tmp_L = []
+            for i in A_t:
+                tmp_L.append(L[i])
+            all_x.append(tmp_x)
+            all_L.append(tmp_L)
+        else:
+            all_L.append(0)
+            all_x.append(0)
+        ###conservative judge
+        ####judge有问题，比例太有问题了
+        for i in N_t:
+            for k in range(4):
+                j=all_x[i][k]
+                front = np.dot(j.reshape(1, -1), theta_hat)
+                V_ni = np.linalg.inv(V)
+                j = j.reshape(-1, 1)
+                j_ni = j.reshape(1, -1)
+                behind = beta * np.sqrt(j_ni.dot(V_ni).dot(j))
+                tmp = max(np.asscalar(front - behind), 0)
+                all_L[i][k]=tmp
+
+        #L每轮的必须更新？还是可以存个和？
+        s1=0
+        for i in N_t:
+            s1+=f_([0,1,2,3],all_L[i])
+        phi_t=len(D_t)*u_0_U+f_(B_t,L)+s1
+        ###太整齐了，1：2的比例，n1,n2，3:7
+        flag = False
+        if phi_t >= (1 - epsilon) * (t + 1) * u_0_U and B_t != 0:
+            flag = True
+            # print('A')
+            n1 += 1
+            N_t.append(t)
+            idx, w = pull2(B_t,feedback)
+            # update
+            # V
+            for i in range(idx + 1):
+                t1 = x[A_t[i]].reshape(-1, 1)
+                t2 = t1.reshape(1, -1)
+                V = V + t1.dot(t2)
+
+            # X
+            for i in range(idx + 1):
+                X.append(x[A_t[i]].tolist())
+            # Y
+            for i in range(idx + 1):
+                Y.append(w[i])
+            # theta
+            tm1 = np.array(X).T.dot(np.array(X)) + lamda * np.eye(d)
+            tm1_ni = np.linalg.inv(tm1)
+            theta_hat = tm1_ni.dot(np.array(X).T).dot(np.array(Y).reshape(-1, 1))
+            # beta
+            det = np.linalg.det(V)
+            beta = np.sqrt(math.log(det / (lamda ** d * delta ** 2))) + np.sqrt(lamda)
+
+        else:
+            n2 += 1
+            D_t.append(t)
+
+
+        ###update reward和regret
+        if flag == True:
+            f1 = f_(A_t, feedback)
+            reward.append(f1)
+            #regret.append(f2 - f1)
+            f.write(str(f1)+'\n')
+        else:
+            reward.append(u_0)
+            #regret.append(f2 - u_0)
+            f.write(str(u_0)+'\n')
+
+        if (t + 1) % 100 == 0:
+            print('&&&&&&')
+            print(n1)
+            print(n2)
+            #f.flush()
+    #f.close()
+    return regret
+
+#lastfm_without(0.2)
